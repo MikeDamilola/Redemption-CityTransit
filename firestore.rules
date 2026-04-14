@@ -1,0 +1,87 @@
+// ===============================================================
+// Assumed Data Model
+// ===============================================================
+//
+// Collection: users
+// Document ID: {userId}
+// Fields:
+//   - uid: string (required)
+//   - email: string (required)
+//   - displayName: string
+//   - role: string (passenger | driver)
+//   - balance: number (required)
+//   - createdAt: number (required)
+//   - photoURL: string
+//   - vehicleNumber: string
+//   - qrCodeData: string
+//
+// Collection: transactions
+// Document ID: {transactionId}
+// Fields:
+//   - id: string (required)
+//   - fromId: string (required)
+//   - fromName: string
+//   - toId: string (required)
+//   - toName: string
+//   - amount: number (required)
+//   - type: string (purchase | payment | transfer)
+//   - timestamp: number (required)
+//   - status: string (completed | pending | failed)
+//
+// ===============================================================
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'email', 'role', 'balance', 'createdAt']) &&
+             data.uid is string &&
+             data.email is string &&
+             data.role in ['passenger', 'driver'] &&
+             data.balance is number &&
+             data.createdAt is number;
+    }
+
+    function isValidTransaction(data) {
+      return data.keys().hasAll(['id', 'fromId', 'toId', 'amount', 'type', 'timestamp', 'status']) &&
+             data.id is string &&
+             data.fromId is string &&
+             data.toId is string &&
+             data.amount is number &&
+             data.amount > 0 &&
+             data.type in ['purchase', 'payment', 'transfer'] &&
+             data.timestamp is number &&
+             data.status in ['completed', 'pending', 'failed'];
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isOwner(userId) && isValidUser(request.resource.data) && request.resource.data.balance == 0;
+      allow update: if isOwner(userId) && isValidUser(request.resource.data);
+    }
+
+    match /transactions/{transactionId} {
+      allow read: if isAuthenticated() && (request.auth.uid == resource.data.fromId || request.auth.uid == resource.data.toId);
+      allow create: if isAuthenticated() && 
+                      request.auth.uid == request.resource.data.fromId && 
+                      isValidTransaction(request.resource.data);
+    }
+  }
+}

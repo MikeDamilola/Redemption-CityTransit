@@ -1,0 +1,6 @@
+{
+  "name": "CityTransit - Token-Based Transport Fare",
+  "description": "A transport application for city residents to buy tokens and pay drivers directly via QR code scanning.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": []
+}
