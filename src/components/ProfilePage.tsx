@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { UserProfile } from '../types';
-import { User, Mail, Shield, Car, Save, Loader2, CheckCircle2 } from 'lucide-react';
-import { motion } from 'motion/react';
+import { User, Mail, Shield, Car, Save, Loader2, CheckCircle2, RefreshCw, AlertTriangle } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 import { db } from '../firebase';
-import { doc, updateDoc } from 'firebase/firestore';
+import { doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { cn } from '../lib/utils';
 
 interface ProfilePageProps {
@@ -14,6 +14,7 @@ export default function ProfilePage({ profile }: ProfilePageProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [showSwitchConfirm, setShowSwitchConfirm] = useState(false);
   const [vehicleNumber, setVehicleNumber] = useState(profile.vehicleNumber || '');
 
   const handleSave = async () => {
@@ -31,6 +32,21 @@ export default function ProfilePage({ profile }: ProfilePageProps) {
       alert("Failed to update profile");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSwitchRole = async () => {
+    setLoading(true);
+    try {
+      const userRef = doc(db, 'users', profile.uid);
+      await deleteDoc(userRef);
+      // App.tsx listener will handle the UI update
+    } catch (err) {
+      console.error("Delete profile error:", err);
+      alert("Failed to reset role");
+    } finally {
+      setLoading(false);
+      setShowSwitchConfirm(false);
     }
   };
 
@@ -144,7 +160,15 @@ export default function ProfilePage({ profile }: ProfilePageProps) {
         </motion.div>
       )}
 
-      <div className="pt-4">
+      <div className="pt-4 space-y-4">
+        <button 
+          onClick={() => setShowSwitchConfirm(true)}
+          className="w-full h-14 bg-neutral-100 text-neutral-600 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-neutral-200 transition-colors"
+        >
+          <RefreshCw className="w-5 h-5" />
+          Switch Role / Reset Profile
+        </button>
+
         <div className="bg-blue-50 border border-blue-100 p-4 rounded-2xl space-y-2">
           <h4 className="font-bold text-blue-900 text-sm">Security Tip</h4>
           <p className="text-xs text-blue-700 leading-relaxed">
@@ -152,6 +176,46 @@ export default function ProfilePage({ profile }: ProfilePageProps) {
           </p>
         </div>
       </div>
+
+      <AnimatePresence>
+        {showSwitchConfirm && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[110] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-white w-full max-w-sm rounded-3xl p-6 space-y-6 shadow-2xl"
+            >
+              <div className="text-center space-y-3">
+                <div className="w-16 h-16 bg-amber-50 rounded-full flex items-center justify-center mx-auto">
+                  <AlertTriangle className="w-8 h-8 text-amber-600" />
+                </div>
+                <h3 className="text-xl font-bold text-neutral-900">Switch Role?</h3>
+                <p className="text-neutral-500 text-sm">
+                  This will reset your current profile and balance. You will be taken back to the role selection screen.
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                <button
+                  onClick={handleSwitchRole}
+                  disabled={loading}
+                  className="w-full h-14 bg-amber-600 text-white rounded-2xl font-bold text-lg shadow-lg shadow-amber-100 flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : "Yes, Reset Profile"}
+                </button>
+                <button
+                  onClick={() => setShowSwitchConfirm(false)}
+                  disabled={loading}
+                  className="w-full h-14 bg-neutral-100 text-neutral-600 rounded-2xl font-bold text-lg"
+                >
+                  Cancel
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

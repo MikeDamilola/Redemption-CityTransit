@@ -123,7 +123,16 @@ export default function PassengerDashboard({ profile }: PassengerDashboardProps)
         <div className="relative z-10 space-y-1">
           <p className="text-blue-100 text-sm font-medium uppercase tracking-wider">Available Balance</p>
           <div className="flex items-baseline gap-2">
-            <h3 className="text-4xl font-bold">{profile.balance}</h3>
+            <AnimatePresence mode="wait">
+              <motion.h3 
+                key={profile.balance}
+                initial={{ y: 10, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                className="text-4xl font-bold"
+              >
+                {profile.balance}
+              </motion.h3>
+            </AnimatePresence>
             <span className="text-blue-100 font-medium">{TOKEN_NAME}</span>
           </div>
         </div>

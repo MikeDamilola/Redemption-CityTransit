@@ -24,14 +24,21 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>('wallet');
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+    let unsubProfile: (() => void) | null = null;
+
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
       setUser(firebaseUser);
+      
+      // Clean up previous profile listener if it exists
+      if (unsubProfile) {
+        unsubProfile();
+        unsubProfile = null;
+      }
+
       if (firebaseUser) {
-        // Fetch or create profile
         const docRef = doc(db, 'users', firebaseUser.uid);
         
-        // Use onSnapshot for real-time balance updates
-        const unsubProfile = onSnapshot(docRef, (docSnap) => {
+        unsubProfile = onSnapshot(docRef, (docSnap) => {
           if (docSnap.exists()) {
             setProfile(docSnap.data() as UserProfile);
           } else {
@@ -43,15 +50,16 @@ export default function App() {
           setError("Failed to load profile");
           setLoading(false);
         });
-
-        return () => unsubProfile();
       } else {
         setProfile(null);
         setLoading(false);
       }
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      if (unsubProfile) unsubProfile();
+    };
   }, []);
 
   const handleRoleSelect = async (role: 'passenger' | 'driver') => {

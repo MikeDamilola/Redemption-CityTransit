@@ -74,7 +74,16 @@ service cloud.firestore {
     match /users/{userId} {
       allow read: if isAuthenticated();
       allow create: if isOwner(userId) && isValidUser(request.resource.data) && request.resource.data.balance == 0;
-      allow update: if isOwner(userId) && isValidUser(request.resource.data);
+      allow update: if isAuthenticated() && (
+        (isOwner(userId) && isValidUser(request.resource.data)) || 
+        (
+          // Allow others to increment balance (e.g. paying a driver)
+          // Must only affect the balance field and must be an increment
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['balance']) &&
+          request.resource.data.balance > resource.data.balance
+        )
+      );
+      allow delete: if isOwner(userId);
     }
 
     match /transactions/{transactionId} {
