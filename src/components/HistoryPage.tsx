@@ -77,19 +77,22 @@ export default function HistoryPage({ profile }: HistoryPageProps) {
                 <div className="flex items-center gap-3">
                   <div className={cn(
                     "w-12 h-12 rounded-2xl flex items-center justify-center",
-                    isPurchase ? "bg-green-50" : isOutgoing ? "bg-blue-50" : "bg-orange-50"
+                    isPurchase ? "bg-green-50" : isOutgoing ? "bg-rose-50" : "bg-orange-50"
                   )}>
                     {isPurchase ? (
                       <Plus className="w-6 h-6 text-green-600" />
                     ) : isOutgoing ? (
-                      <ArrowUpRight className="w-6 h-6 text-blue-600" />
+                      <ArrowUpRight className="w-6 h-6 text-rose-600" />
                     ) : (
                       <ArrowDownLeft className="w-6 h-6 text-orange-600" />
                     )}
                   </div>
                   <div>
                     <p className="font-bold text-neutral-900">
-                      {isPurchase ? 'Token Purchase' : isOutgoing ? `Paid to ${tx.toName}` : `Received from ${tx.fromName}`}
+                      {isPurchase ? 'Token Purchase' : 
+                       tx.type === 'transfer' ? 'Withdrawal to Bank' :
+                       isOutgoing ? `Paid to ${tx.toName}` : 
+                       `Received from ${tx.fromName}`}
                     </p>
                     <p className="text-xs text-neutral-400">
                       {new Date(tx.timestamp).toLocaleDateString()} • {new Date(tx.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -99,7 +102,7 @@ export default function HistoryPage({ profile }: HistoryPageProps) {
                 <div className="text-right">
                   <p className={cn(
                     "font-bold text-lg",
-                    isPurchase || !isOutgoing ? "text-green-600" : "text-neutral-900"
+                    isPurchase || !isOutgoing ? "text-green-600" : "text-rose-600"
                   )}>
                     {isPurchase || !isOutgoing ? '+' : '-'}{tx.amount}
                   </p>

@@ -101,12 +101,13 @@ export default function PassengerDashboard({ profile }: PassengerDashboardProps)
       });
 
       await batch.commit();
+      console.log("Payment batch committed successfully");
       toast.success(`Paid ${amount} unit to ${confirmPayment.driverName}`);
       setConfirmPayment(null);
     } catch (err) {
-      console.error("Payment error:", err);
+      console.error("CRITICAL: Payment batch failed:", err);
       handleFirestoreError(err, OperationType.WRITE, 'batch-payment');
-      toast.error("Payment failed. Please try again.");
+      toast.error("Payment failed. Please check your balance and try again.");
     } finally {
       setProcessing(false);
     }

@@ -39,10 +39,13 @@ export default function ProfilePage({ profile }: ProfilePageProps) {
     setLoading(true);
     try {
       const userRef = doc(db, 'users', profile.uid);
-      await deleteDoc(userRef);
+      // Just clear the role instead of deleting the doc
+      await updateDoc(userRef, {
+        role: null
+      });
       // App.tsx listener will handle the UI update
     } catch (err) {
-      console.error("Delete profile error:", err);
+      console.error("Switch role error:", err);
       alert("Failed to reset role");
     } finally {
       setLoading(false);

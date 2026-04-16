@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { auth, db, signInWithGoogle, logout } from './firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, setDoc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { UserProfile } from './types';
 import { Loader2, LogOut, Wallet, QrCode, History, User as UserIcon, Bus } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -40,7 +40,9 @@ export default function App() {
         
         unsubProfile = onSnapshot(docRef, (docSnap) => {
           if (docSnap.exists()) {
-            setProfile(docSnap.data() as UserProfile);
+            const data = docSnap.data() as UserProfile;
+            console.log("Profile updated:", data.uid, "Balance:", data.balance);
+            setProfile(data);
           } else {
             setProfile(null);
           }
@@ -66,24 +68,36 @@ export default function App() {
     if (!user) return;
     setLoading(true);
     try {
-      const newProfile: UserProfile = {
-        uid: user.uid,
-        email: user.email || '',
-        displayName: user.displayName || 'User',
-        role,
-        balance: 0,
-        createdAt: Date.now(),
-      };
+      const userRef = doc(db, 'users', user.uid);
+      const docSnap = await getDoc(userRef);
+      
+      if (docSnap.exists()) {
+        // Update existing profile
+        await updateDoc(userRef, {
+          role,
+          qrCodeData: role === 'driver' ? `citytransit://pay/${user.uid}` : null
+        });
+      } else {
+        // Create new profile
+        const newProfile: UserProfile = {
+          uid: user.uid,
+          email: user.email || '',
+          displayName: user.displayName || 'User',
+          role,
+          balance: 0,
+          createdAt: Date.now(),
+        };
 
-      if (user.photoURL) {
-        newProfile.photoURL = user.photoURL;
+        if (user.photoURL) {
+          newProfile.photoURL = user.photoURL;
+        }
+
+        if (role === 'driver') {
+          newProfile.qrCodeData = `citytransit://pay/${user.uid}`;
+        }
+
+        await setDoc(userRef, newProfile);
       }
-
-      if (role === 'driver') {
-        newProfile.qrCodeData = `citytransit://pay/${user.uid}`;
-      }
-
-      await setDoc(doc(db, 'users', user.uid), newProfile);
     } catch (err) {
       console.error("Role select error:", err);
       setError("Failed to set role");
@@ -104,7 +118,7 @@ export default function App() {
     return <AuthScreen onSignIn={signInWithGoogle} />;
   }
 
-  if (!profile) {
+  if (!profile || !profile.role) {
     return <RoleSelection onSelect={handleRoleSelect} />;
   }
 

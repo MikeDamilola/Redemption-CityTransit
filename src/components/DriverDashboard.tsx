@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { UserProfile, Transaction } from '../types';
 import { QrCode, ArrowDownLeft, TrendingUp, Users, Clock, Share2 } from 'lucide-react';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import { CURRENCY_SYMBOL, TOKEN_NAME } from '../constants';
 import { QRCodeSVG } from 'qrcode.react';
 import { db } from '../firebase';
-import { collection, query, where, orderBy, limit, onSnapshot, doc, updateDoc, increment, setDoc } from 'firebase/firestore';
+import { collection, query, where, orderBy, limit, onSnapshot, doc, updateDoc, increment, setDoc, writeBatch } from 'firebase/firestore';
 import { cn, handleFirestoreError, OperationType } from '../lib/utils';
 import { toast } from 'sonner';
 
@@ -16,6 +16,10 @@ interface DriverDashboardProps {
 export default function DriverDashboard({ profile }: DriverDashboardProps) {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [withdrawing, setWithdrawing] = useState(false);
+
+  useEffect(() => {
+    console.log("DriverDashboard balance update:", profile.balance);
+  }, [profile.balance]);
 
   useEffect(() => {
     const q = query(
@@ -43,38 +47,34 @@ export default function DriverDashboard({ profile }: DriverDashboardProps) {
 
     setWithdrawing(true);
     try {
-      // Simulate bank transfer
+      // Simulate bank transfer delay
       await new Promise(resolve => setTimeout(resolve, 2000));
       
       const amount = profile.balance;
+      const batch = writeBatch(db);
+      
       const userRef = doc(db, 'users', profile.uid);
-      try {
-        await updateDoc(userRef, { balance: 0 });
-      } catch (error) {
-        handleFirestoreError(error, OperationType.WRITE, `users/${profile.uid}`);
-      }
+      batch.update(userRef, { balance: 0 });
 
       const txRef = doc(collection(db, 'transactions'));
-      try {
-        await setDoc(txRef, {
-          id: txRef.id,
-          fromId: profile.uid,
-          fromName: profile.displayName,
-          toId: 'BANK',
-          toName: 'Bank Account',
-          amount: amount,
-          type: 'transfer',
-          timestamp: Date.now(),
-          status: 'completed'
-        });
-      } catch (error) {
-        handleFirestoreError(error, OperationType.WRITE, `transactions/${txRef.id}`);
-      }
+      batch.set(txRef, {
+        id: txRef.id,
+        fromId: profile.uid,
+        fromName: profile.displayName,
+        toId: 'BANK',
+        toName: 'Bank Account',
+        amount: amount,
+        type: 'transfer',
+        timestamp: Date.now(),
+        status: 'completed'
+      });
 
+      await batch.commit();
       toast.success(`Successfully withdrawn ${CURRENCY_SYMBOL}${(amount * 100).toLocaleString()} to your bank!`);
     } catch (err) {
       console.error("Withdraw error:", err);
-      toast.error("Withdrawal failed. Check permissions.");
+      handleFirestoreError(err, OperationType.WRITE, 'withdrawal-batch');
+      toast.error("Withdrawal failed. Please check your connection.");
     } finally {
       setWithdrawing(false);
     }
@@ -92,11 +92,29 @@ export default function DriverDashboard({ profile }: DriverDashboardProps) {
           <p className="text-neutral-400 text-sm font-medium uppercase tracking-wider">Total Earnings</p>
           <div className="flex items-baseline justify-between">
             <div className="flex items-baseline gap-2">
-              <h3 className="text-4xl font-bold">{profile.balance}</h3>
+              <AnimatePresence mode="wait">
+                <motion.h3 
+                  key={profile.balance}
+                  initial={{ y: 10, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  className="text-4xl font-bold"
+                >
+                  {profile.balance}
+                </motion.h3>
+              </AnimatePresence>
               <span className="text-neutral-400 font-medium">{TOKEN_NAME}</span>
             </div>
             <div className="text-right">
-              <p className="text-2xl font-bold text-blue-400">{CURRENCY_SYMBOL}{(profile.balance * 100).toLocaleString()}</p>
+              <AnimatePresence mode="wait">
+                <motion.p 
+                  key={profile.balance}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="text-2xl font-bold text-blue-400"
+                >
+                  {CURRENCY_SYMBOL}{(profile.balance * 100).toLocaleString()}
+                </motion.p>
+              </AnimatePresence>
               <p className="text-[10px] text-neutral-500 uppercase font-bold">Naira Equivalent</p>
             </div>
           </div>
