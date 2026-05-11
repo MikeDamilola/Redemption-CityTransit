@@ -11,6 +11,7 @@ export interface UserProfile {
   // Driver specific
   vehicleNumber?: string;
   qrCodeData?: string;
+  isAvailable?: boolean;
 }
 
 export interface Transaction {
@@ -29,4 +30,21 @@ export interface TokenPackage {
   id: string;
   units: number;
   priceNaira: number;
+}
+
+export type RideStatus = 'pending' | 'accepted' | 'completed' | 'cancelled';
+
+export interface Ride {
+  id: string;
+  passengerId: string;
+  passengerName: string;
+  driverId: string | null;
+  driverName: string | null;
+  status: RideStatus;
+  pickup: string;
+  destination: string;
+  fare: number;
+  timestamp: number;
+  acceptedAt?: number;
+  completedAt?: number;
 }

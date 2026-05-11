@@ -13,7 +13,8 @@
         "createdAt": { "type": "number" },
         "photoURL": { "type": "string", "format": "uri" },
         "vehicleNumber": { "type": "string" },
-        "qrCodeData": { "type": "string" }
+        "qrCodeData": { "type": "string" },
+        "isAvailable": { "type": "boolean", "description": "Whether a driver is currently taking orders" }
       },
       "required": ["uid", "email", "role", "balance", "createdAt"]
     },
@@ -33,6 +34,26 @@
         "status": { "type": "string", "enum": ["completed", "pending", "failed"] }
       },
       "required": ["id", "fromId", "toId", "amount", "type", "timestamp", "status"]
+    },
+    "Ride": {
+      "title": "Ride",
+      "description": "Ride bookings between commuters and drivers.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "passengerId": { "type": "string" },
+        "passengerName": { "type": "string" },
+        "driverId": { "type": "string" },
+        "driverName": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "accepted", "completed", "cancelled"] },
+        "pickup": { "type": "string" },
+        "destination": { "type": "string" },
+        "fare": { "type": "number" },
+        "timestamp": { "type": "number" },
+        "acceptedAt": { "type": "number" },
+        "completedAt": { "type": "number" }
+      },
+      "required": ["id", "passengerId", "passengerName", "status", "pickup", "destination", "fare", "timestamp"]
     }
   },
   "firestore": {
@@ -43,6 +64,10 @@
     "/transactions/{transactionId}": {
       "schema": "Transaction",
       "description": "Transaction records"
+    },
+    "/rides/{rideId}": {
+      "schema": "Ride",
+      "description": "Ride booking records"
     }
   }
 }

@@ -6,6 +6,7 @@ import { CURRENCY_SYMBOL, TOKEN_NAME, TOKEN_PACKAGES } from '../constants';
 import { cn } from '../lib/utils';
 import QRScanner from './QRScanner';
 import TokenPurchaseModal from './TokenPurchaseModal';
+import RideBooking from './RideBooking';
 import { db } from '../firebase';
 import { collection, query, where, orderBy, limit, onSnapshot, doc, increment, writeBatch, getDoc, setDoc } from 'firebase/firestore';
 import { toast } from 'sonner';
@@ -182,6 +183,9 @@ export default function PassengerDashboard({ profile }: PassengerDashboardProps)
         </div>
       </div>
 
+      {/* Ride Booking */}
+      <RideBooking profile={profile} />
+
       {/* Transactions */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
@@ -206,7 +210,9 @@ export default function PassengerDashboard({ profile }: PassengerDashboardProps)
                   </div>
                   <div>
                     <p className="font-bold text-neutral-900">{tx.type === 'purchase' ? 'Token Purchase' : `Payment to ${tx.toName}`}</p>
-                    <p className="text-xs text-neutral-400">{new Date(tx.timestamp).toLocaleDateString()}</p>
+                    <p className="text-xs text-neutral-400">
+                      {new Date(tx.timestamp).toLocaleDateString()} • {new Date(tx.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </p>
                   </div>
                 </div>
                 <p className={cn(

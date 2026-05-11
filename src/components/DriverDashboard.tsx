@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { UserProfile, Transaction } from '../types';
-import { QrCode, ArrowDownLeft, TrendingUp, Users, Clock, Share2 } from 'lucide-react';
+import { QrCode, ArrowDownLeft, TrendingUp, Users, Clock, Share2, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { CURRENCY_SYMBOL, TOKEN_NAME } from '../constants';
 import { QRCodeSVG } from 'qrcode.react';
@@ -8,6 +8,7 @@ import { db } from '../firebase';
 import { collection, query, where, orderBy, limit, onSnapshot, doc, updateDoc, increment, setDoc, writeBatch } from 'firebase/firestore';
 import { cn, handleFirestoreError, OperationType } from '../lib/utils';
 import { toast } from 'sonner';
+import RideRequests from './RideRequests';
 
 interface DriverDashboardProps {
   profile: UserProfile;
@@ -16,10 +17,28 @@ interface DriverDashboardProps {
 export default function DriverDashboard({ profile }: DriverDashboardProps) {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [withdrawing, setWithdrawing] = useState(false);
+  const [toggling, setToggling] = useState(false);
 
   useEffect(() => {
     console.log("DriverDashboard balance update:", profile.balance);
   }, [profile.balance]);
+
+  const toggleAvailability = async () => {
+    setToggling(true);
+    try {
+      const userRef = doc(db, 'users', profile.uid);
+      await updateDoc(userRef, {
+        isAvailable: !profile.isAvailable
+      });
+      toast.success(profile.isAvailable ? "You are now Offline" : "You are now Online!");
+    } catch (err) {
+      console.error("Toggle availability error:", err);
+      handleFirestoreError(err, OperationType.UPDATE, `users/${profile.uid}`);
+      toast.error("Failed to update status");
+    } finally {
+      setToggling(false);
+    }
+  };
 
   useEffect(() => {
     const q = query(
@@ -82,6 +101,39 @@ export default function DriverDashboard({ profile }: DriverDashboardProps) {
 
   return (
     <div className="p-4 space-y-6">
+      {/* Availability Toggle */}
+      <div className="flex items-center justify-between bg-white p-4 rounded-3xl border border-neutral-100 shadow-sm">
+        <div className="flex items-center gap-3">
+          <div className={cn(
+            "w-12 h-12 rounded-2xl flex items-center justify-center transition-colors",
+            profile.isAvailable ? "bg-green-50" : "bg-neutral-50"
+          )}>
+            <div className={cn(
+              "w-3 h-3 rounded-full animate-pulse",
+              profile.isAvailable ? "bg-green-500" : "bg-neutral-300"
+            )} />
+          </div>
+          <div>
+            <p className="font-bold text-neutral-900">{profile.isAvailable ? "Online" : "Offline"}</p>
+            <p className="text-xs text-neutral-400 font-medium">
+              {profile.isAvailable ? "Commuters can see you" : "Go online to see requests"}
+            </p>
+          </div>
+        </div>
+        <button
+          onClick={toggleAvailability}
+          disabled={toggling}
+          className={cn(
+            "h-12 px-6 rounded-2xl font-bold transition-all active:scale-95 disabled:opacity-50",
+            profile.isAvailable 
+              ? "bg-neutral-100 text-neutral-600 border border-neutral-200" 
+              : "bg-blue-600 text-white shadow-lg shadow-blue-500/20"
+          )}
+        >
+          {toggling ? <Loader2 className="w-5 h-5 animate-spin" /> : profile.isAvailable ? "Go Offline" : "Go Online"}
+        </button>
+      </div>
+
       {/* Earnings Overview */}
       <motion.div 
         initial={{ y: 20, opacity: 0 }}
@@ -131,6 +183,9 @@ export default function DriverDashboard({ profile }: DriverDashboardProps) {
         {/* Decorative Elements */}
         <div className="absolute -right-10 -top-10 w-40 h-40 bg-blue-600/20 rounded-full blur-3xl" />
       </motion.div>
+
+      {/* Ride Requests */}
+      <RideRequests profile={profile} />
 
       {/* QR Code Section */}
       <div className="bg-white p-8 rounded-3xl border border-neutral-100 flex flex-col items-center gap-6 shadow-sm">
@@ -213,7 +268,9 @@ export default function DriverDashboard({ profile }: DriverDashboardProps) {
                       <p className="font-bold text-neutral-900">From {tx.fromName}</p>
                       <span className="text-[10px] font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded uppercase tracking-wider">Credit</span>
                     </div>
-                    <p className="text-xs text-neutral-400">{new Date(tx.timestamp).toLocaleTimeString()}</p>
+                    <p className="text-xs text-neutral-400">
+                      {new Date(tx.timestamp).toLocaleDateString()} • {new Date(tx.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </p>
                   </div>
                 </div>
                 <p className="font-bold text-green-600">+{tx.amount}</p>

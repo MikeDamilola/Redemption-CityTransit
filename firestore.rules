@@ -28,6 +28,20 @@
 //   - timestamp: number (required)
 //   - status: string (completed | pending | failed)
 //
+// Collection: rides
+// Document ID: {rideId}
+// Fields:
+//   - id: string (required)
+//   - passengerId: string (required)
+//   - passengerName: string (required)
+//   - driverId: string
+//   - driverName: string
+//   - status: string (pending | accepted | completed | cancelled)
+//   - pickup: string (required)
+//   - destination: string (required)
+//   - fare: number (required)
+//   - timestamp: number (required)
+//
 // ===============================================================
 
 rules_version = '2';
@@ -52,7 +66,8 @@ service cloud.firestore {
              data.email is string &&
              (data.role in ['passenger', 'driver'] || data.role == null) &&
              data.balance is number &&
-             data.createdAt is number;
+             data.createdAt is number &&
+             (data.isAvailable == null || data.isAvailable is bool);
     }
 
     function isValidTransaction(data) {
@@ -65,6 +80,22 @@ service cloud.firestore {
              data.type in ['purchase', 'payment', 'transfer'] &&
              data.timestamp is number &&
              data.status in ['completed', 'pending', 'failed'];
+    }
+
+    function isValidRide(data) {
+      return data.keys().hasAll(['id', 'passengerId', 'passengerName', 'status', 'pickup', 'destination', 'fare', 'timestamp', 'driverId', 'driverName']) &&
+             data.id is string &&
+             data.passengerId is string &&
+             data.passengerName is string &&
+             (data.driverId == null || data.driverId is string) &&
+             (data.driverName == null || data.driverName is string) &&
+             data.status in ['pending', 'accepted', 'completed', 'cancelled'] &&
+             data.pickup is string &&
+             data.destination is string &&
+             data.fare is number &&
+             data.timestamp is number &&
+             (data.get('acceptedAt', 0) == 0 || data.get('acceptedAt', 0) is number) &&
+             (data.get('completedAt', 0) == 0 || data.get('completedAt', 0) is number);
     }
 
     // ===============================================================
@@ -90,6 +121,21 @@ service cloud.firestore {
       allow create: if isAuthenticated() && 
                       request.auth.uid == request.resource.data.fromId && 
                       isValidTransaction(request.resource.data);
+    }
+
+    match /rides/{rideId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && 
+                     request.auth.uid == request.resource.data.passengerId && 
+                     isValidRide(request.resource.data);
+      allow update: if isAuthenticated() && isValidRide(request.resource.data) && (
+        // Passenger can cancel their pending ride
+        (request.auth.uid == resource.data.passengerId && resource.data.status == 'pending' && request.resource.data.status == 'cancelled') ||
+        // Driver can accept a pending ride
+        (resource.data.status == 'pending' && request.resource.data.status == 'accepted' && request.resource.data.driverId == request.auth.uid) ||
+        // Driver can complete an accepted ride
+        (resource.data.status == 'accepted' && request.auth.uid == resource.data.driverId && request.resource.data.status == 'completed')
+      );
     }
   }
 }
