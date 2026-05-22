@@ -95,12 +95,16 @@ service cloud.firestore {
              data.passengerName is string &&
              (data.driverId == null || data.driverId is string) &&
              (data.driverName == null || data.driverName is string) &&
-             data.status in ['pending', 'accepted', 'completed', 'cancelled'] &&
+             data.status in ['pending', 'accepted', 'in_progress', 'completed', 'cancelled'] &&
              data.pickup is string &&
              data.destination is string &&
              data.fare is number &&
              data.timestamp is number &&
+             (data.get('passengerPhone', '') == '' || data.get('passengerPhone', '') is string) &&
+             (data.get('driverPhone', '') == '' || data.get('driverPhone', '') is string) &&
+             (data.get('estimatedArrival', '') == '' || data.get('estimatedArrival', '') is string) &&
              (data.get('acceptedAt', 0) == 0 || data.get('acceptedAt', 0) is number) &&
+             (data.get('startedAt', 0) == 0 || data.get('startedAt', 0) is number) &&
              (data.get('completedAt', 0) == 0 || data.get('completedAt', 0) is number);
     }
 
@@ -136,14 +140,27 @@ service cloud.firestore {
                      request.auth.uid == request.resource.data.passengerId && 
                      isValidRide(request.resource.data);
       allow update: if isAuthenticated() && isValidRide(request.resource.data) && (
-        // Passenger can cancel their pending ride
-        (request.auth.uid == resource.data.passengerId && resource.data.status == 'pending' && request.resource.data.status == 'cancelled') ||
+        // Passenger can cancel their pending or accepted ride
+        (request.auth.uid == resource.data.passengerId && 
+         (resource.data.status == 'pending' || resource.data.status == 'accepted') && 
+         request.resource.data.status == 'cancelled') ||
+        
         // Driver can accept a pending ride
-        (resource.data.status == 'pending' && request.resource.data.status == 'accepted' && request.resource.data.driverId == request.auth.uid) ||
-        // Driver can complete an accepted ride
-        (resource.data.status == 'accepted' && request.auth.uid == resource.data.driverId && request.resource.data.status == 'completed')
+        (resource.data.status == 'pending' && 
+         request.resource.data.status == 'accepted' && 
+         request.resource.data.driverId == request.auth.uid) ||
+        
+        // Driver can update ETA or start/pick up an accepted ride
+        (resource.data.status == 'accepted' && 
+         request.auth.uid == resource.data.driverId && 
+         (request.resource.data.status == 'in_progress' || request.resource.data.status == 'accepted')) ||
+        
+        // Driver can complete an in_progress ride
+        (resource.data.status == 'in_progress' && 
+         request.auth.uid == resource.data.driverId && 
+         request.resource.data.status == 'completed')
       );
-      allow delete: if isAdmin() || (isAuthenticated() && request.auth.uid == resource.data.passengerId && resource.data.status == 'pending');
+      allow delete: if isAdmin();
     }
   }
 }

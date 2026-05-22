@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { UserProfile, Ride } from '../types';
 import { db } from '../firebase';
 import { collection, query, where, onSnapshot, doc, updateDoc, orderBy, limit, getDocs, setDoc } from 'firebase/firestore';
-import { MapPin, Navigation, Clock, CheckCircle2, XCircle, Loader2, Users, Search, ChevronRight, User } from 'lucide-react';
+import { MapPin, Navigation, Clock, CheckCircle2, XCircle, Loader2, Users, Search, ChevronRight, User, Phone } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
 import { cn, handleFirestoreError, OperationType } from '../lib/utils';
@@ -24,7 +24,7 @@ export default function RideBooking({ profile }: RideBookingProps) {
     const q = query(
       collection(db, 'rides'),
       where('passengerId', '==', profile.uid),
-      where('status', 'in', ['pending', 'accepted']),
+      where('status', 'in', ['pending', 'accepted', 'in_progress']),
       orderBy('timestamp', 'desc'),
       limit(1)
     );
@@ -64,6 +64,11 @@ export default function RideBooking({ profile }: RideBookingProps) {
       return;
     }
 
+    if (!profile.phoneNumber) {
+      toast.error("Please add your phone number in Profile first");
+      return;
+    }
+
     if (profile.balance < 5) {
       toast.error(`Insufficient balance. Minimum 5 ${TOKEN_NAME} required.`);
       return;
@@ -78,6 +83,7 @@ export default function RideBooking({ profile }: RideBookingProps) {
         id: newRideRef.id,
         passengerId: profile.uid,
         passengerName: profile.displayName,
+        passengerPhone: profile.phoneNumber,
         driverId: null,
         driverName: null,
         status: 'pending',
@@ -318,17 +324,60 @@ export default function RideBooking({ profile }: RideBookingProps) {
             <div className="relative">
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 bg-green-50 rounded-2xl flex items-center justify-center">
-                    <CheckCircle2 className="w-6 h-6 text-green-500" />
+                  <div className={cn(
+                    "w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg",
+                    activeRide.status === 'accepted' ? "bg-blue-50 text-blue-600 shadow-blue-100" : "bg-green-50 text-green-600 shadow-green-100"
+                  )}>
+                    {activeRide.status === 'accepted' ? <Clock className="w-6 h-6 animate-pulse" /> : <Navigation className="w-6 h-6" />}
                   </div>
                   <div>
-                    <h3 className="font-bold text-neutral-900 whitespace-nowrap">Ride Accepted!</h3>
+                    <h3 className="font-bold text-neutral-900 whitespace-nowrap">
+                      {activeRide.status === 'accepted' ? "Driver On The Way" : "Ride In Progress"}
+                    </h3>
                     <p className="text-xs text-neutral-400 font-medium uppercase tracking-wider">
-                      Driver: {activeRide.driverName}
+                      {activeRide.driverName}
                     </p>
                   </div>
                 </div>
+                {activeRide.status === 'accepted' && (
+                  <button 
+                    onClick={handleCancelRide}
+                    className="p-2 text-rose-500 hover:bg-rose-50 rounded-xl transition-colors"
+                  >
+                    <XCircle className="w-6 h-6" />
+                  </button>
+                )}
               </div>
+
+              {/* Communication Row (only when driver assigned) */}
+              {activeRide.driverPhone && (
+                <div className="grid grid-cols-2 gap-3 mb-6">
+                  <a 
+                    href={`tel:${activeRide.driverPhone}`}
+                    className="h-12 bg-neutral-900 text-white rounded-xl flex items-center justify-center gap-2 font-bold text-sm shadow-lg shadow-neutral-200 active:scale-95 transition-transform"
+                  >
+                    <Phone className="w-4 h-4" />
+                    Call Driver
+                  </a>
+                  <button 
+                    onClick={() => toast.info("Chat feature coming soon!")}
+                    className="h-12 bg-blue-50 text-blue-600 border border-blue-100 rounded-xl flex items-center justify-center gap-2 font-bold text-sm active:scale-95 transition-transform"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                    Chat
+                  </button>
+                </div>
+              )}
+
+              {activeRide.status === 'accepted' && activeRide.estimatedArrival && (
+                <div className="bg-blue-50/50 border border-blue-100 rounded-2xl p-4 mb-6 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-blue-600" />
+                    <span className="text-xs font-bold text-blue-900 uppercase">Est. Arrival</span>
+                  </div>
+                  <span className="font-bold text-blue-600">{activeRide.estimatedArrival} mins</span>
+                </div>
+              )}
 
               <div className="space-y-4 mb-6">
                 <div className="flex gap-3">
@@ -342,32 +391,47 @@ export default function RideBooking({ profile }: RideBookingProps) {
                       <p className="text-[10px] text-neutral-400 uppercase font-bold mb-1">Pickup</p>
                       <p className="text-sm font-medium line-clamp-1">{activeRide.pickup}</p>
                     </div>
-                    <div className="bg-neutral-50 p-3 rounded-xl border border-neutral-100 flex justify-between items-center">
-                      <div>
-                        <p className="text-[10px] text-neutral-400 uppercase font-bold mb-1">Destination</p>
-                        <p className="text-sm font-medium line-clamp-1">{activeRide.destination}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-[10px] text-neutral-400 uppercase font-bold mb-1">Requested</p>
-                        <p className="text-xs font-bold text-neutral-600">
-                          {new Date(activeRide.timestamp).toLocaleDateString()} {new Date(activeRide.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </p>
-                      </div>
+                    <div className="bg-neutral-50 p-3 rounded-xl border border-neutral-100">
+                      <p className="text-[10px] text-neutral-400 uppercase font-bold mb-1">Destination</p>
+                      <p className="text-sm font-medium line-clamp-1">{activeRide.destination}</p>
                     </div>
                   </div>
                 </div>
               </div>
 
-              <div className="bg-green-50 border border-green-100 rounded-2xl p-4 flex items-center justify-between">
+              <div className={cn(
+                "rounded-2xl p-4 flex items-center justify-between border",
+                activeRide.status === 'accepted' ? "bg-neutral-50 border-neutral-100" : "bg-green-50 border-green-100"
+              )}>
                 <div>
-                  <p className="text-[10px] text-green-600 uppercase font-bold mb-0.5">
-                    {activeRide.acceptedAt ? `Accepted ${new Date(activeRide.acceptedAt).toLocaleDateString()} ${new Date(activeRide.acceptedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Calculating...'}
+                  <p className={cn(
+                    "text-[10px] uppercase font-bold mb-0.5",
+                    activeRide.status === 'accepted' ? "text-neutral-400" : "text-green-600"
+                  )}>
+                    Total Fare
                   </p>
-                  <p className="font-bold text-green-900">{activeRide.fare} {TOKEN_NAME}</p>
+                  <p className={cn(
+                    "font-bold",
+                    activeRide.status === 'accepted' ? "text-neutral-900" : "text-green-900"
+                  )}>
+                    {activeRide.fare} {TOKEN_NAME}
+                  </p>
                 </div>
-                <div className="flex items-center gap-2 px-3 py-1.5 bg-green-500 text-white rounded-full text-xs font-bold shadow-sm shadow-green-100">
-                  <Loader2 className="w-3 h-3 animate-spin" />
-                  In Progress
+                <div className={cn(
+                  "flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold shadow-sm",
+                  activeRide.status === 'accepted' ? "bg-white text-blue-600" : "bg-green-500 text-white shadow-green-100"
+                )}>
+                  {activeRide.status === 'accepted' ? (
+                    <>
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      Assigning...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-3 h-3" />
+                      In Progress
+                    </>
+                  )}
                 </div>
               </div>
             </div>

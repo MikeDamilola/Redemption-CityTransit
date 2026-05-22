@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
+import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signOut } from 'firebase/auth';
 import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
 
 // Import the Firebase configuration
@@ -11,7 +11,22 @@ export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId || '(defa
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 
-export const signInWithGoogle = () => signInWithPopup(auth, googleProvider);
+export const signInWithGoogle = async () => {
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  
+  if (isMobile) {
+    return signInWithRedirect(auth, googleProvider);
+  } else {
+    try {
+      return await signInWithPopup(auth, googleProvider);
+    } catch (error) {
+      console.error("Popup failed, trying redirect", error);
+      return signInWithRedirect(auth, googleProvider);
+    }
+  }
+};
+
+export const handleRedirectResult = () => getRedirectResult(auth);
 export const logout = () => signOut(auth);
 
 // Connection test as per guidelines

@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { auth, db, signInWithGoogle, logout } from './firebase';
+import { auth, db, signInWithGoogle, logout, handleRedirectResult } from './firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { doc, getDoc, setDoc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { UserProfile } from './types';
-import { Loader2, LogOut, Wallet, QrCode, History, User as UserIcon, Bus } from 'lucide-react';
+import { Loader2, LogOut, Wallet, QrCode, History, User as UserIcon, Bus, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from './lib/utils';
 import PassengerDashboard from './components/PassengerDashboard';
@@ -20,14 +20,31 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [authChecking, setAuthChecking] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>('wallet');
 
   useEffect(() => {
+    const checkRedirect = async () => {
+      try {
+        await handleRedirectResult();
+      } catch (err: any) {
+        console.error("Redirect result error:", err);
+        if (err.code === 'auth/unauthorized-domain') {
+          setError("Domain not authorized. Please add this domain to your Firebase Console Authorized Domains list.");
+        } else {
+          setError("Login failed. Please try again.");
+        }
+      }
+    };
+
+    checkRedirect();
+
     let unsubProfile: (() => void) | null = null;
 
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
       setUser(firebaseUser);
+      setAuthChecking(false);
       
       // Clean up previous profile listener if it exists
       if (unsubProfile) {
@@ -106,10 +123,18 @@ export default function App() {
     }
   };
 
-  if (loading) {
+  if (authChecking || loading) {
     return (
-      <div className="min-h-screen bg-neutral-50 flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+      <div className="min-h-screen bg-neutral-50 flex items-center justify-center p-6 text-center">
+        <div className="space-y-4">
+          <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto" />
+          {error && (
+            <div className="max-w-xs mx-auto p-4 bg-red-50 text-red-600 rounded-2xl flex items-start gap-3 text-sm">
+              <AlertCircle className="w-5 h-5 shrink-0" />
+              <p>{error}</p>
+            </div>
+          )}
+        </div>
       </div>
     );
   }

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { UserProfile, Ride } from '../types';
 import { db } from '../firebase';
 import { collection, query, where, onSnapshot, doc, updateDoc, orderBy, limit, writeBatch, increment } from 'firebase/firestore';
-import { Navigation, MapPin, CheckCircle2, ChevronRight, Loader2, Map as MapIcon } from 'lucide-react';
+import { Navigation, MapPin, CheckCircle2, ChevronRight, Loader2, Map as MapIcon, Phone, Clock, UserCheck } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
 import { cn, handleFirestoreError, OperationType } from '../lib/utils';
@@ -31,11 +31,11 @@ export default function RideRequests({ profile }: RideRequestsProps) {
       setPendingRides(rides);
     });
 
-    // Listen for current driver's accepted ride
+    // Listen for current driver's active ride (accepted or in_progress)
     const qActive = query(
       collection(db, 'rides'),
       where('driverId', '==', profile.uid),
-      where('status', '==', 'accepted'),
+      where('status', 'in', ['accepted', 'in_progress']),
       limit(1)
     );
 
@@ -51,7 +51,19 @@ export default function RideRequests({ profile }: RideRequestsProps) {
       unsubPending();
       unsubActive();
     };
-  }, [profile.uid, profile.isAvailable]);
+  }, [profile.uid]);
+
+  const handleUpdateETA = async (minutes: number) => {
+    if (!activeRide) return;
+    try {
+      await updateDoc(doc(db, 'rides', activeRide.id), {
+        estimatedArrival: minutes.toString()
+      });
+      toast.success(`ETA updated to ${minutes} mins`);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `rides/${activeRide.id}`);
+    }
+  };
 
   const handleAcceptRide = async (rideId: string) => {
     if (!profile.isAvailable) {
@@ -60,11 +72,14 @@ export default function RideRequests({ profile }: RideRequestsProps) {
     }
     setLoadingAction(rideId);
     try {
+      // For simplicity, let's auto-set an initial ETA when accepting
       await updateDoc(doc(db, 'rides', rideId), {
         status: 'accepted',
         driverId: profile.uid,
         driverName: profile.displayName,
-        acceptedAt: Date.now()
+        driverPhone: profile.phoneNumber,
+        acceptedAt: Date.now(),
+        estimatedArrival: "5" // Default 5 mins
       });
       toast.success("Ride accepted!");
     } catch (err) {
@@ -75,25 +90,35 @@ export default function RideRequests({ profile }: RideRequestsProps) {
       setLoadingAction(null);
     }
   };
+
+  const handlePickup = async () => {
+    if (!activeRide) return;
+    setLoadingAction('pickup');
+    try {
+      await updateDoc(doc(db, 'rides', activeRide.id), {
+        status: 'in_progress',
+        startedAt: Date.now()
+      });
+      toast.success("Ride started! Drive safely.");
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `rides/${activeRide.id}`);
+      toast.error("Failed to start ride");
+    } finally {
+      setLoadingAction(null);
+    }
+  };
+
   const handleCompleteRide = async () => {
     if (!activeRide) return;
     setLoadingAction('complete');
     try {
       const batch = writeBatch(db);
       
-      // Update ride status
       batch.update(doc(db, 'rides', activeRide.id), {
         status: 'completed',
         completedAt: Date.now()
       });
 
-      // Transfer fare: Deduct from passenger, Add to driver
-      // Note: For a robust system, we should also check if passenger still has balance, 
-      // but firestore rules already check balance >= fare if we write it properly.
-      // Actually, my payment rules require isOwner for deduction.
-      // So here the driver IS deducting from passenger? That might fail rules.
-      // THE BETTER WAY: Create a transaction and update balances.
-      
       const passengerRef = doc(db, 'users', activeRide.passengerId);
       const driverRef = doc(db, 'users', profile.uid);
       const txRef = doc(collection(db, 'transactions'));
@@ -135,28 +160,53 @@ export default function RideRequests({ profile }: RideRequestsProps) {
             exit={{ opacity: 0, y: -20 }}
             className="bg-neutral-900 text-white rounded-3xl p-6 shadow-xl relative overflow-hidden"
           >
-            {/* Background Map Gradient Overlay */}
             <div className="absolute inset-0 bg-gradient-to-br from-blue-600/20 to-transparent opacity-50" />
             
             <div className="relative">
               <div className="flex items-center justify-between mb-8">
                 <div className="flex items-center gap-3">
                   <div className="w-12 h-12 bg-white/10 backdrop-blur-md rounded-2xl flex items-center justify-center">
-                    <Navigation className="w-6 h-6 text-blue-400" />
+                    {activeRide.status === 'accepted' ? <Clock className="w-6 h-6 text-blue-400" /> : <Navigation className="w-6 h-6 text-green-400" />}
                   </div>
                   <div>
-                    <h3 className="font-bold text-lg">Active Trip</h3>
+                    <h3 className="font-bold text-lg">
+                      {activeRide.status === 'accepted' ? 'Pickup Commuter' : 'Trip in Progress'}
+                    </h3>
                     <div className="flex items-center gap-2">
-                      <p className="text-xs text-white/50 font-medium uppercase tracking-wider">Passenger: {activeRide.passengerName}</p>
+                      <p className="text-xs text-white/50 font-medium uppercase tracking-wider">{activeRide.passengerName}</p>
                       <span className="text-white/20">•</span>
                       <p className="text-[10px] text-blue-400 font-bold uppercase">
-                        Started: {new Date(activeRide.acceptedAt || activeRide.timestamp).toLocaleDateString()} {new Date(activeRide.acceptedAt || activeRide.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        {activeRide.status === 'accepted' ? 'Heading to pickup' : 'On the road'}
                       </p>
                     </div>
                   </div>
                 </div>
-                <div className="px-3 py-1 bg-blue-500/20 border border-blue-500/30 rounded-full text-[10px] font-bold text-blue-400 uppercase tracking-widest">
-                  Navigating
+                <div className={cn(
+                  "px-3 py-1 border rounded-full text-[10px] font-bold uppercase tracking-widest",
+                  activeRide.status === 'accepted' ? "bg-blue-500/20 border-blue-500/30 text-blue-400" : "bg-green-500/20 border-green-500/30 text-green-400"
+                )}>
+                  {activeRide.status === 'accepted' ? 'Pending Pickup' : 'Active Ride'}
+                </div>
+              </div>
+
+              {/* Communication & ETA row */}
+              <div className="grid grid-cols-2 gap-3 mb-6">
+                <a 
+                  href={`tel:${activeRide.passengerPhone}`}
+                  className="h-12 bg-white/10 hover:bg-white/20 border border-white/10 rounded-xl flex items-center justify-center gap-2 font-bold text-xs transition-colors"
+                >
+                  <Phone className="w-3.5 h-3.5" />
+                  Call Passenger
+                </a>
+                <div className="h-12 bg-white/10 border border-white/10 rounded-xl flex items-center justify-between px-3">
+                  <div className="flex items-center gap-1.5 text-xs font-bold">
+                    <Clock className="w-3.5 h-3.5 text-blue-400" />
+                    <span>{activeRide.estimatedArrival || '--'}m ETA</span>
+                  </div>
+                  <div className="flex gap-1">
+                    <button onClick={() => handleUpdateETA(Math.max(1, parseInt(activeRide.estimatedArrival || '5') - 1))} className="w-6 h-6 bg-white/10 rounded flex items-center justify-center text-xs">-</button>
+                    <button onClick={() => handleUpdateETA(parseInt(activeRide.estimatedArrival || '5') + 1)} className="w-6 h-6 bg-white/10 rounded flex items-center justify-center text-xs">+</button>
+                  </div>
                 </div>
               </div>
 
@@ -169,33 +219,48 @@ export default function RideRequests({ profile }: RideRequestsProps) {
                   </div>
                   <div className="flex-1 space-y-4">
                     <div>
-                      <p className="text-[10px] text-white/30 uppercase font-bold mb-1">Pickup</p>
+                      <p className="text-[10px] text-white/30 uppercase font-bold mb-1 tracking-tighter">Pickup Location</p>
                       <p className="text-sm font-bold text-white/90">{activeRide.pickup}</p>
                     </div>
                     <div>
-                      <p className="text-[10px] text-white/30 uppercase font-bold mb-1">Destination</p>
+                      <p className="text-[10px] text-white/30 uppercase font-bold mb-1 tracking-tighter">Destination</p>
                       <p className="text-sm font-bold text-white/90">{activeRide.destination}</p>
                     </div>
                   </div>
                 </div>
               </div>
 
-              <div className="flex gap-3">
+              {activeRide.status === 'accepted' ? (
+                <button
+                  onClick={handlePickup}
+                  disabled={loadingAction === 'pickup'}
+                  className="w-full h-14 bg-blue-600 text-white rounded-2xl font-bold flex items-center justify-center gap-3 active:scale-95 transition-all shadow-lg shadow-blue-600/20 disabled:opacity-50"
+                >
+                  {loadingAction === 'pickup' ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    <>
+                      <UserCheck className="w-5 h-5" />
+                      Commuter Picked Up
+                    </>
+                  )}
+                </button>
+              ) : (
                 <button
                   onClick={handleCompleteRide}
                   disabled={loadingAction === 'complete'}
-                  className="flex-1 h-14 bg-white text-black rounded-2xl font-bold flex items-center justify-center gap-2 active:scale-95 transition-all disabled:opacity-50"
+                  className="w-full h-14 bg-white text-black rounded-2xl font-bold flex items-center justify-center gap-2 active:scale-95 transition-all shadow-lg disabled:opacity-50"
                 >
                   {loadingAction === 'complete' ? (
                     <Loader2 className="w-5 h-5 animate-spin" />
                   ) : (
                     <>
                       <CheckCircle2 className="w-5 h-5" />
-                      Complete Ride
+                      Complete Ride & Collect Fare
                     </>
                   )}
                 </button>
-              </div>
+              )}
             </div>
           </motion.div>
         ) : (
@@ -223,7 +288,7 @@ export default function RideRequests({ profile }: RideRequestsProps) {
                   >
                     <div className="flex items-start justify-between mb-4">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-neutral-100 rounded-xl flex items-center justify-center font-bold text-neutral-500">
+                        <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center font-bold text-blue-600">
                           {ride.passengerName.charAt(0)}
                         </div>
                         <div>
@@ -234,26 +299,26 @@ export default function RideRequests({ profile }: RideRequestsProps) {
                       <div className="text-right">
                         <p className="text-[10px] text-neutral-400 font-bold uppercase mb-1">Requested</p>
                         <p className="text-xs font-bold text-neutral-600">
-                          {new Date(ride.timestamp).toLocaleDateString()} {new Date(ride.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          {new Date(ride.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </p>
                       </div>
                     </div>
 
-                    <div className="space-y-3 mb-5 py-3 border-y border-neutral-50">
+                    <div className="space-y-3 mb-5 py-3 border-y border-neutral-50 font-medium">
                       <div className="flex items-center gap-3">
                         <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-                        <p className="text-xs text-neutral-600 truncate flex-1">{ride.pickup}</p>
+                        <p className="text-xs text-neutral-600 truncate flex-1 leading-relaxed">{ride.pickup}</p>
                       </div>
                       <div className="flex items-center gap-3">
                         <MapPin className="w-3.5 h-3.5 text-rose-500" />
-                        <p className="text-xs text-neutral-900 font-bold truncate flex-1">{ride.destination}</p>
+                        <p className="text-xs text-neutral-900 font-bold truncate flex-1 leading-relaxed">{ride.destination}</p>
                       </div>
                     </div>
 
                     <button
                       onClick={() => handleAcceptRide(ride.id)}
                       disabled={!!loadingAction}
-                      className="w-full h-12 bg-neutral-900 text-white rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-blue-600 transition-colors active:scale-95 disabled:opacity-50"
+                      className="w-full h-12 bg-neutral-900 text-white rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-blue-600 transition-colors active:scale-95 disabled:opacity-50 shadow-sm"
                     >
                       {loadingAction === ride.id ? (
                         <Loader2 className="w-4 h-4 animate-spin" />

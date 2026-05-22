@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { UserProfile } from '../types';
-import { User, Mail, Shield, Car, Save, Loader2, CheckCircle2, RefreshCw, AlertTriangle, Wallet } from 'lucide-react';
+import { User, Mail, Shield, Car, Save, Loader2, CheckCircle2, RefreshCw, AlertTriangle, Wallet, Phone } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { db } from '../firebase';
 import { doc, updateDoc, deleteDoc, collection, getDocs, writeBatch, query, where } from 'firebase/firestore';
@@ -18,13 +18,15 @@ export default function ProfilePage({ profile }: ProfilePageProps) {
   const [showSwitchConfirm, setShowSwitchConfirm] = useState(false);
   const [showGlobalResetConfirm, setShowGlobalResetConfirm] = useState(false);
   const [vehicleNumber, setVehicleNumber] = useState(profile.vehicleNumber || '');
+  const [phoneNumber, setPhoneNumber] = useState(profile.phoneNumber || '');
 
   const handleSave = async () => {
     setLoading(true);
     try {
       const userRef = doc(db, 'users', profile.uid);
       await updateDoc(userRef, {
-        vehicleNumber: vehicleNumber
+        vehicleNumber: profile.role === 'driver' ? vehicleNumber : null,
+        phoneNumber: phoneNumber
       });
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
@@ -136,6 +138,37 @@ export default function ProfilePage({ profile }: ProfilePageProps) {
             label="Email Address" 
             value={profile.email} 
           />
+          <div className="p-4 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-neutral-50 rounded-lg">
+                <Phone className="w-5 h-5 text-neutral-400" />
+              </div>
+              <div>
+                <p className="text-[10px] text-neutral-400 font-bold uppercase">Phone Number</p>
+                {isEditing ? (
+                  <input 
+                    type="tel" 
+                    value={phoneNumber}
+                    onChange={(e) => setPhoneNumber(e.target.value)}
+                    className="font-bold text-neutral-700 border-b-2 border-blue-600 outline-none w-full"
+                    placeholder="Enter phone number"
+                  />
+                ) : (
+                  <p className={cn("font-bold text-neutral-700", !profile.phoneNumber && "text-red-500 font-normal italic text-sm")}>
+                    {profile.phoneNumber || 'Required for rides'}
+                  </p>
+                )}
+              </div>
+            </div>
+            {!isEditing && (
+              <button 
+                onClick={() => setIsEditing(true)}
+                className="text-xs font-bold text-blue-600 hover:bg-blue-50 px-3 py-1 rounded-full transition-colors"
+              >
+                Edit
+              </button>
+            )}
+          </div>
           <InfoRow 
             icon={<User className="w-5 h-5 text-neutral-400" />} 
             label="User ID" 
@@ -157,7 +190,6 @@ export default function ProfilePage({ profile }: ProfilePageProps) {
                         onChange={(e) => setVehicleNumber(e.target.value)}
                         className="font-bold text-neutral-700 border-b-2 border-blue-600 outline-none w-full"
                         placeholder="Enter vehicle number"
-                        autoFocus
                       />
                     ) : (
                       <p className={cn("font-bold", !profile.vehicleNumber && "text-red-500 italic")}>
@@ -166,37 +198,30 @@ export default function ProfilePage({ profile }: ProfilePageProps) {
                     )}
                   </div>
                 </div>
-                {!isEditing && (
-                  <button 
-                    onClick={() => setIsEditing(true)}
-                    className="text-xs font-bold text-blue-600 hover:bg-blue-50 px-3 py-1 rounded-full transition-colors"
-                  >
-                    Edit
-                  </button>
-                )}
               </div>
-              
-              {isEditing && (
-                <div className="flex gap-2 pt-2">
-                  <button 
-                    onClick={handleSave}
-                    disabled={loading}
-                    className="flex-1 h-10 bg-blue-600 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-md shadow-blue-100 disabled:opacity-50"
-                  >
-                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                    Save Changes
-                  </button>
-                  <button 
-                    onClick={() => {
-                      setIsEditing(false);
-                      setVehicleNumber(profile.vehicleNumber || '');
-                    }}
-                    className="h-10 px-4 bg-neutral-100 text-neutral-600 rounded-xl font-bold text-sm"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              )}
+            </div>
+          )}
+          
+          {isEditing && (
+            <div className="p-4 flex gap-2">
+              <button 
+                onClick={handleSave}
+                disabled={loading}
+                className="flex-1 h-10 bg-blue-600 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-md shadow-blue-100 disabled:opacity-50"
+              >
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                Save Changes
+              </button>
+              <button 
+                onClick={() => {
+                  setIsEditing(false);
+                  setVehicleNumber(profile.vehicleNumber || '');
+                  setPhoneNumber(profile.phoneNumber || '');
+                }}
+                className="h-10 px-4 bg-neutral-100 text-neutral-600 rounded-xl font-bold text-sm"
+              >
+                Cancel
+              </button>
             </div>
           )}
         </div>
